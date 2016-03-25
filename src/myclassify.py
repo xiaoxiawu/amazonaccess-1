@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 from pandas.core.series import Series
 import os
+from sklearn import preprocessing
+
 
 SEED = 1234
 
@@ -23,6 +25,72 @@ def show_basic_statics(df, col_list = list()):
         print 'Col:{0:s}, dtype:{1:s}'.format(colname, col.dtype)
         print 'unique:', num_unique, 'min:', min_elem, 'max:', max_elem, 'mean:', mean, 'std:', std
         print
+
+def remove_constant_col(df, col_list = list()):
+    if not col_list:
+        col_list = list(df.columns.values)
+
+    drop_list = []
+    for colname in col_list:
+        col = df[colname].values
+        if np.std(col) == 0.0:
+            drop_list.append(colname)
+
+    df = df.drop(drop_list, axis =1)
+
+    return df
+
+def relabel_integer_col(df, col_list = list()):
+    if not col_list:
+        col_list = list(df.columns.values)
+
+    for col_name in col_list:
+        col_data = df[col_name].values
+        if issubclass(col_data.dtype.type, np.integer):
+                le = preprocessing.LabelEncoder()
+                le.fit(col_data)
+                col_data = le.transform(col_data)
+                df[col_name] = Series(col_data, index = df.index)
+
+def relabel_float_col(df, col_list = list(), rthresh = 0.1, atrhesh = 30):
+    if not col_list:
+        col_list = list(df.columns.values)
+
+    for col_name in col_list:
+        col_data = df[col_name].values
+        if issubclass(col_data.dtype.type, np.float):
+            nnz = np.nonzero(col_data)[0].shape[0]
+            n_unique = np.unique(col_data).shape[0]
+            rate = float(n_unique)/nnz
+            if rate < rthresh or n_unique < atrhesh:
+                le = preprocessing.LabelEncoder()
+                le.fit(col_data)
+                col_data = le.transform(col_data)
+                df[col_name] = Series(col_data, index = df.index)
+
+
+def remove_identical_columns(df, col_list = list()):
+    if not col_list:
+        col_list = list(df.columns.values)
+
+    n_col = len(col_list)
+
+    df_data = df[col_list].values
+
+    drop_list = []
+    for i in xrange(n_col):
+        col_i_name = col_list[i]
+        col_i_data = df_data[:, i]
+        for j in xrange(i+1, n_col):
+            col_j_name = col_list[j]
+            col_j_data = df_data[:, j]    
+            if np.array_equal(col_i_data, col_j_data) and (col_j_name not in drop_list):
+                drop_list.append(col_j_name)
+
+    df = df.drop(drop_list, axis = 1)
+
+    return df
+
 
 # check the combination of different columns
 def check_two_columns(df, col1, col2):
@@ -73,7 +141,6 @@ def merge_two_cat_columns(df, col1, col2, col_new=None, remove='none', hasher=No
 
     df[col_new] = Series(col_new_data, index = df.index)
 
-from sklearn import preprocessing
 # put all rare event into one group
 def combine_rare(df, col_list = list(), new_name_list = list(), rare_line=1):
     if not col_list :
@@ -440,7 +507,6 @@ def np_numeric_transform(Xtrain, Xtest, col_list = list(), operation='log', stan
             col_data_test = Xtest[:, col]
             col_data = np.hstack((col_data_train, col_data_test))
             col_mean = np.mean(col_data)
-            # print col_mean
             col_std = np.std(col_data)
             Xtrain[:, col] = 1./col_std * (Xtrain[:, col] - col_mean)
             Xtest[:, col] = 1./col_std * (Xtest[:, col] - col_mean)
@@ -568,7 +634,7 @@ def strat_cv_predict_proba(myclassifier, Xtrain, ytrain, nfolds=5, randstate=SEE
 
         sk_cv_score = np.zeros(nfolds, float)
         k = 0
-        skfold = StratifiedKFold(n = ytrain.shape[0], n_folds=nfolds, random_state=randstate)
+        skfold = StratifiedKFold(ytrain, n_folds=nfolds, random_state=randstate)
         for train_index, test_index in skfold:
             sk_Xtrain, sk_Xtest = Xtrain[train_index], Xtrain[test_index]
             sk_ytrain, sk_ytest = ytrain[train_index], ytrain[test_index]
@@ -599,7 +665,7 @@ def strat_cv_score(myclassifier, Xtrain, ytrain, nfolds=5, randstate=SEED, score
         sk_cv_score = np.zeros(nfolds, float)
 
         k = 0
-        skfold = StratifiedKFold(n = ytrain.shape[0], n_folds=nfolds, random_state=randstate)
+        skfold = StratifiedKFold(ytrain, n_folds=nfolds, random_state=randstate)
         for train_index, test_index in skfold:
             sk_Xtrain, sk_Xtest = Xtrain[train_index], Xtrain[test_index]
             sk_ytrain, sk_ytest = ytrain[train_index], ytrain[test_index]
@@ -612,7 +678,7 @@ def strat_cv_score(myclassifier, Xtrain, ytrain, nfolds=5, randstate=SEED, score
 
 import itertools
 # here param_grid just need to contain the parameters required to be updated
-def cv_grid_search(myclassifier, param_grid, Xtrain, ytrain, nfolds=10, randstate=SEED, score_func=roc_auc_score, criterion = 'max'):
+def cv_grid_search(myclassifier, param_grid, Xtrain, ytrain, nfolds=5, randstate=SEED, score_func=roc_auc_score, criterion = 'max'):
     # can be adapted to use sklearn CVGridSearch
     # org_params = myclassifier._params
     # org_param_grid = dict{}
@@ -760,10 +826,63 @@ def concat_feature_set(myfset_list, sparsify = False):
 
     return newfname_list, newfind_list, newXtrain, newXtest
 
+# selecting extra feature 
+def random_select_feature(myclassifier, bfset, myfset, ytrain, nfolds=5, randstate=SEED, score_func=roc_auc_score):
+    n_feature = len(myfset.fname_list)
 
+    ftrain_list = [myfset.Xtrain[:, myfset.find_list[i]:myfset.find_list[i+1]] for i in xrange(n_feature)]
 
+    if scipy.sparse.issparse(myfset.Xtrain):
+        hstack_func = scipy.sparse.hstack
+    else:
+        hstack_func = np.hstack
 
+    np.random.seed(randstate)
+    permute = list(np.random.permutation(n_feature))
 
+    flag = 0
+    prev_score = 0.
+    goodf_list = list()
+    good_Xtrain = bfset.Xtrain
+    while len(goodf_list) < n_feature and flag == 0:
+        print 'current score :', prev_score
+        if prev_score == 0.:
+            test_cv_scores = cv_score(myclassifier, good_Xtrain, ytrain, nfolds, randstate, score_func)
+            cur_score = np.mean(test_cv_scores)
+        else:
+            for curf in permute:
+                cur_Xtrain = hstack_func((good_Xtrain, ftrain_list[curf]))
+                test_cv_scores = cv_score(myclassifier, cur_Xtrain, ytrain, nfolds, randstate, score_func)
+                cur_score = np.mean(test_cv_scores)
+                if cur_score > prev_score:
+                    good_Xtrain = cur_Xtrain
+                    goodf_list.append(curf)
+                    permute.remove(curf)
+                    print '{0:s} selected'.format(myfset.fname_list[curf])
+                    break
+        if cur_score > prev_score:
+            prev_score = cur_score
+        else:
+            flag = 1
+
+    goodf_list.sort()
+    n_goodf = len(goodf_list)
+    newfname_list = bfset.fname_list
+    newfind_list = bfset.find_list
+    newXtrain = bfset.Xtrain
+    newXtest = bfset.Xtest
+
+    for i in xrange(n_goodf):
+        goodf = goodf_list[i]
+        prev_total = newfind_list[-1]
+        ind_low = myfset.find_list[goodf]
+        ind_up = myfset.find_list[goodf+1]
+        newfname_list.append(myfset.fname_list[goodf])
+        newfind_list.append(prev_total + ind_up - ind_low)
+        newXtrain = hstack_func(newXtrain, myfset.Xtrain[:, ind_low:ind_up])
+        newXtest = hstack_func(newXtest, myfset.Xtest[:, ind_low:ind_up])
+
+    return newfname_list, newfind_list, newXtrain, newXtest 
 
 
 
