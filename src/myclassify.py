@@ -103,12 +103,10 @@ import cPickle as pickle
 # generating countable
 
 class MyCountTable(object):
-    one_count_table = dict()
-    two_count_table = dict()
-    _file_path = None
-
     def __init__(self):
-        pass
+        self.one_count_table = dict()
+        self.two_count_table = dict()
+        self._file_path = None
 
     def save_count_tables(self, file_path):
         directory = os.path.dirname(file_path)
@@ -442,6 +440,7 @@ def np_numeric_transform(Xtrain, Xtest, col_list = list(), operation='log', stan
             col_data_test = Xtest[:, col]
             col_data = np.hstack((col_data_train, col_data_test))
             col_mean = np.mean(col_data)
+            # print col_mean
             col_std = np.std(col_data)
             Xtrain[:, col] = 1./col_std * (Xtrain[:, col] - col_mean)
             Xtest[:, col] = 1./col_std * (Xtest[:, col] - col_mean)
@@ -666,14 +665,13 @@ def cv_grid_search(myclassifier, param_grid, Xtrain, ytrain, nfolds=10, randstat
 
 class MyFeatureSet(object):
     # self.set_name = None
-    fname_list = list()
-    find_list = list()
-    Xtrain = None
-    Xtest = None
-    _file_path = None
-
     def __init__(self):
-        pass
+        self.fname_list = list()
+        self.find_list = list()
+        self.Xtrain = None
+        self.Xtest = None
+        self._file_path = None
+
 
     def generate_feature_set(self, file_path):
         raise NotImplementedError
