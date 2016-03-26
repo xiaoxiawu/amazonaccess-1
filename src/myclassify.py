@@ -879,8 +879,8 @@ def random_select_feature(myclassifier, bfset, myfset, ytrain, nfolds=5, randsta
         ind_up = myfset.find_list[goodf+1]
         newfname_list.append(myfset.fname_list[goodf])
         newfind_list.append(prev_total + ind_up - ind_low)
-        newXtrain = hstack_func(newXtrain, myfset.Xtrain[:, ind_low:ind_up])
-        newXtest = hstack_func(newXtest, myfset.Xtest[:, ind_low:ind_up])
+        newXtrain = hstack_func((newXtrain, myfset.Xtrain[:, ind_low:ind_up]))
+        newXtest = hstack_func((newXtest, myfset.Xtest[:, ind_low:ind_up]))
 
     return newfname_list, newfind_list, newXtrain, newXtest 
 
